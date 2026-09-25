@@ -84,7 +84,7 @@ jobs:
 
       - name: Build
         shell: bash
-        run: ./build.sh --backend --frontend -r linux-musl-x64 -f net6.0
+        run: ./build.sh --backend --frontend
         env:
           READARRVERSION: ${{ env.READARR_VERSION }}.${{ github.run_number }}
 
