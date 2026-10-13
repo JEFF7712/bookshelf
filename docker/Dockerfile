@@ -1,47 +1,13 @@
-FROM ghcr.io/linuxserver/baseimage-alpine:3.21
-
-ARG TARGETPLATFORM
-
-ENV XDG_CONFIG_HOME="/config/xdg" \
-    COMPlus_EnableDiagnostics=0 \
-    TMPDIR=/run/readarr-temp
-
-RUN apk add -U --upgrade --no-cache \
-    icu-libs \
-    sqlite-libs \
-    xmlstarlet
-
-ARG GIT_BRANCH
-ARG COMMIT_HASH
-ARG BUILD_DATE
-ARG METADATA_URL=https://api.bookinfo.pro
-ARG HARDCOVER
-
-LABEL maintainer="pennydreadful"
-
-ENV METADATA_URL=${METADATA_URL}
-ENV HARDCOVER=${HARDCOVER}
-
-RUN mkdir -p /app/readarr
-
-RUN --mount=type=bind,source=_output,target=_output \
-    case "$TARGETPLATFORM" in \
-    "linux/amd64") cp -r /_output/net6.0/linux-musl-x64 /app/readarr/bin ;; \
-    "linux/arm64") cp -r /_output/net6.0/linux-musl-arm64 /app/readarr/bin ;; \
-    "darwin/amd64") cp -r /_output/net6.0/osx-x64 /app/readarr/bin ;; \
-    "darwin/arm64") cp -r /_output/net6.0/osx-arm64 /app/readarr/bin ;; \
-    "windows/amd64") cp -r /_output/net6.0/win-x64 /app/readarr/bin ;; \
-    *) echo "Unknown platform: $TARGETPLATFORM" && exit 1 ;; \
-    esac; \
-    cp -r /_output/UI /app/readarr/bin/UI
-
-RUN echo -e "UpdateMethod=docker\nBranch=${GIT_BRANCH}\nPackageVersion=${COMMIT_HASH}}\nPackageAuthor=pennydreadful" > /app/readarr/package_info && \
-    printf "version: ${COMMIT_HASH}}\nBuild-date: ${BUILD_DATE}" > /build_version
-
-# copy local files
-COPY docker/root/ /
-
-# ports and volumes
+FROM registry.rupan.dev/apps/dotnet-sdk-6@sha256:6115544bac6ed4ed8863e3270e088588397eec549ebe78ae8980699727c0eb94 AS toolchain
+FROM registry.rupan.dev/upstream/docker.io/library/python@sha256:34386ef0cb081344d7ec1c103ba398e6e9f64e9ab3a1509accc92a4e24a07258
+COPY --from=toolchain /usr/share/dotnet/dotnet /app/dotnet/dotnet
+COPY --from=toolchain /usr/share/dotnet/host /app/dotnet/host
+COPY --from=toolchain /usr/share/dotnet/shared /app/dotnet/shared
+COPY .sovereign/build/runtime/bin /app/bin
+COPY .sovereign/build/runtime/.sovereign-build.json /app/.sovereign-build.json
+COPY .sovereign/base/supply/libsqlite3.so.0 /usr/lib/x86_64-linux-gnu/libsqlite3.so.0
+ENV DOTNET_ROOT=/app/dotnet DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=1 HOME=/tmp
+USER 1000:1000
+WORKDIR /app/bin
 EXPOSE 8787
-
-VOLUME /config
+ENTRYPOINT ["/app/dotnet/dotnet", "/app/bin/Readarr.dll", "-nobrowser", "-data=/config"]
